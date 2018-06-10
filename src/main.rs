@@ -57,18 +57,29 @@ fn list_packages() -> Result<Vec<Package>, String> {
 
 		assert!(space_end > space_start);
 
-		let name = &line[0..space_start];
+		let (name, version) = split_name_version(&line[0..space_start]).unwrap();
 		let desc = &line[space_end..];
 
 		packages.push(Package {
 			name: name.to_string(),
+            version: version.to_string(),
 			description: desc.to_string(),
-			dependencies: Vec::new()
+			dependencies: Vec::new(),
 		});
 	}
 
 	return Ok(packages);
 }
+
+fn split_name_version<'a>(combined: &'a str) -> Option<(&'a str, &'a str)> {
+    let last_dash = match combined.rfind('-') {
+        None => return None,
+        Some(x) => x
+    };
+
+    return Some((&combined[0..last_dash], &combined[last_dash + 1..]));
+}
+
 
 fn retrieve_dependencies(package: &mut Package) -> Result<(), String> {
     use serde_json::{Value, Error};
