@@ -1,0 +1,7 @@
+rule cargo
+    command = cargo build --color always
+    description = Build via cargo
+
+build target/debug/pkg-graph: cargo src/main.rs src/package.rs
+
+default target/debug/pkg-graph
