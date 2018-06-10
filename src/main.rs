@@ -10,18 +10,20 @@ use std::process::Command;
 
 fn main() {
 	for mut package in list_packages().unwrap() {
-		println!("Package: {}", package.name);
+		println!("Package: {} ({})", package.name, package.version);
 		println!("         {}", package.description);
 
 		retrieve_dependencies(&mut package).unwrap();
-        for dep in &package.dependencies {
-            println!("         * {}", dep);
+        match &package.dependencies {
+            &None => continue,
+            Some(deps) => for dep in deps {
+                println!("         * {}", dep);
+            }
         }
 	}
 }
 
 fn list_packages() -> Result<Vec<Package>, String> {
-
 	let stdout = Command::new("pkg")
 		.args(&["info"])
 		.output()
@@ -64,7 +66,7 @@ fn list_packages() -> Result<Vec<Package>, String> {
 			name: name.to_string(),
             version: version.to_string(),
 			description: desc.to_string(),
-			dependencies: Vec::new(),
+			dependencies: None,
 		});
 	}
 
@@ -104,15 +106,16 @@ fn retrieve_dependencies(package: &mut Package) -> Result<(), String> {
     let deserialized: Value = serde_json::from_str(&stdout)
         .map_err(|e| format!("JSON deserialization error: {:?}", e))?;
 
-    let deps = &deserialized["deps"].as_object();
-    if deps.is_none() {
-        return Ok(());
-    }
+    let deps = match deserialized["deps"].as_object() {
+        None => return Ok(()),
+        Some(x) => x
+    };
 
-    for dep in deps.unwrap().keys() {
-        let dep_str: &str = &format!("{}", dep);
-        package.dependencies.push(dep_str.to_string());
+    let mut pdeps = Vec::new();
+    for dep in deps.keys() {
+        pdeps.push(dep.clone());
     }
+    package.dependencies = Some(pdeps);
 
     return Ok(());
 }
