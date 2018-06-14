@@ -6,73 +6,102 @@ extern crate serde_json;
 mod package;
 use package::Package;
 use std::process::Command;
+use std::collections::HashMap;
 
 fn main() {
     println!("digraph {{");
 
-	for mut package in list_packages().unwrap() {
-        println!("\t\"{}\";", package.name);
+    let mut packages = list_packages().unwrap();
+    let mut deptree: HashMap<&str, Vec<&str>> = HashMap::new();
 
-		retrieve_dependencies(&mut package).unwrap();
+    for mut package in &mut packages {
+        retrieve_dependencies(&mut package).unwrap();
+    }
+
+    for package in &packages {
         match &package.dependencies {
-            &None => continue,
-            Some(deps) => for dep in deps {
-                println!("\t\t\"{}\" -> \"{}\";", dep, package.name);
+            None => continue,
+            Some(ref deps) => {
+                for dep in deps {
+                    let v = deptree.entry(dep.as_str())
+                        .or_insert(Vec::new());
+                    v.push(package.name.as_str());
+                }
+            }
+        };
+    }
+
+    for package in &packages {
+        print!("\t");
+        let this_deps: Option<&Vec<&str>> = deptree.get(package.name.as_str());
+        match this_deps {
+            None => println!("\"{}\";", &package.name),
+            Some(deps) => {
+                match deps.len() {
+                    1 => println!("\"{}\" -> \"{}\"", package.name, deps[0]),
+                    _ => {
+                        print!("\"{}\" -> {{ ", &package.name);
+                        for dep in deps {
+                            print!("\"{}\" ", dep);
+                        }
+                        println!("}}");
+                    }
+                }
             }
         }
-	}
+    }
 
     println!("}}");
 }
 
 fn list_packages() -> Result<Vec<Package>, String> {
-	let stdout = Command::new("pkg")
-		.args(&["info"])
-		.output()
-		.map_err(|e| format!("{:?}", e))?
-		.stdout;
-	let stdout = String::from_utf8_lossy(&stdout);
+    let stdout = Command::new("pkg")
+        .args(&["info"])
+        .output()
+        .map_err(|e| format!("{:?}", e))?
+        .stdout;
+    let stdout = String::from_utf8_lossy(&stdout);
 
-	let mut packages = Vec::new();
-	for line in stdout.split('\n') {
-		let mut space_start = None;
-		let mut space_end = None;
+    let mut packages = Vec::new();
+    for line in stdout.split('\n') {
+        let mut space_start = None;
+        let mut space_end = None;
 
-		let mut i = 0;
-		for c in line.chars() {
-			if space_start.is_none() {
-				if c == ' ' {
-					space_start = Some(i);
-				}
-			}
-			else if c != ' ' {
-				space_end = Some(i);
-				break;
-			}
-			i += 1;
-		}
+        let mut i = 0;
+        for c in line.chars() {
+            if space_start.is_none() {
+                if c == ' ' {
+                    space_start = Some(i);
+                }
+            }
+            else if c != ' ' {
+                space_end = Some(i);
+                break;
+            }
+            i += 1;
+        }
 
-		if space_start.is_none() || space_start.unwrap() == 0 || space_end.is_none() {
-			continue;
-		}
+        if space_start.is_none() || space_start.unwrap() == 0 || space_end.is_none() {
+            continue;
+        }
 
-		let space_start = space_start.unwrap();
-		let space_end = space_end.unwrap();
+        let space_start = space_start.unwrap();
+        let space_end = space_end.unwrap();
 
-		assert!(space_end > space_start);
+        assert!(space_end > space_start);
 
-		let (name, version) = split_name_version(&line[0..space_start]).unwrap();
-		let desc = &line[space_end..];
+        let (name, version) = split_name_version(&line[0..space_start]).unwrap();
+        let desc = &line[space_end..];
 
-		packages.push(Package {
-			name: name.to_string(),
+        packages.push(Package {
+            name: name.to_string(),
             version: version.to_string(),
-			description: desc.to_string(),
-			dependencies: None,
-		});
-	}
+            description: desc.to_string(),
+            dependencies: None,
+        });
+    }
 
-	return Ok(packages);
+    return Ok(packages);
 }
 
 fn split_name_version<'a>(combined: &'a str) -> Option<(&'a str, &'a str)> {
@@ -86,7 +115,7 @@ fn split_name_version<'a>(combined: &'a str) -> Option<(&'a str, &'a str)> {
 
 
 fn retrieve_dependencies(package: &mut Package) -> Result<(), String> {
-    use serde_json::{Value, Error};
+    use serde_json::{Value};
     use std::process::Stdio;
 
     let cmd = Command::new("pkg")
