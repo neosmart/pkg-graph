@@ -9,18 +9,21 @@ use package::Package;
 use std::process::Command;
 
 fn main() {
+    println!("digraph {{");
+
 	for mut package in list_packages().unwrap() {
-		println!("Package: {} ({})", package.name, package.version);
-		println!("         {}", package.description);
+        println!("\t\"{}\";", package.name);
 
 		retrieve_dependencies(&mut package).unwrap();
         match &package.dependencies {
             &None => continue,
             Some(deps) => for dep in deps {
-                println!("         * {}", dep);
+                println!("\t\t\"{}\" -> \"{}\";", dep, package.name);
             }
         }
 	}
+
+    println!("}}");
 }
 
 fn list_packages() -> Result<Vec<Package>, String> {
